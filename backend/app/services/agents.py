@@ -24,7 +24,7 @@ parser = StrOutputParser()
 # Initialize Tavily client
 tavily_client = None
 if settings.TAVILY_API_KEY:
-    tavily_client = TavilyClient(api_key='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')
+    tavily_client = TavilyClient(api_key=settings.TAVILY_API_KEY)
 else:
     logger.warning("TAVILY_API_KEY not set, web search functionality will be disabled")
 
