@@ -1,9 +1,7 @@
-"""
-LangGraph agents for roadmap generation.
-Refactored from the original Streamlit implementation.
-"""
+"""LangGraph agents for roadmap generation using Gemini via LangChain."""
 from typing import TypedDict, List
-from langchain_ollama import OllamaLLM
+
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.tools import tool
@@ -15,12 +13,11 @@ from app.services.vector_store import get_vector_store
 
 logger = get_logger(__name__)
 
-# Initialize LLM
-llm = OllamaLLM(
-    model=settings.OLLAMA_MODEL,
-    temperature=settings.OLLAMA_TEMPERATURE,
-    num_ctx=settings.OLLAMA_NUM_CTX,
-    base_url=settings.OLLAMA_BASE_URL
+# Initialize LLM (Gemini via LangChain)
+llm = ChatGoogleGenerativeAI(
+    model=settings.GEMINI_MODEL,
+    api_key=settings.GEMINI_API_KEY,
+    temperature=settings.GEMINI_TEMPERATURE,
 )
 parser = StrOutputParser()
 

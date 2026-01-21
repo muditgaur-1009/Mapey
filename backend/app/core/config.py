@@ -1,9 +1,8 @@
-"""
-Configuration management for the application.
+"""Configuration management for the application.
 Uses pydantic-settings for environment variable management.
 """
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from typing import Optional, Union
 import os
 
@@ -20,11 +19,12 @@ class Settings(BaseSettings):
     # CORS Settings - can be comma-separated string or list
     CORS_ORIGINS: Union[str, list[str]] = "http://localhost:3000,http://localhost:3001"
     
-    # LLM Settings
-    OLLAMA_MODEL: str = "llama3.2:1b"
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_TEMPERATURE: float = 0.4
-    OLLAMA_NUM_CTX: int = 1048
+    # LLM Settings - Gemini via LangChain
+    GEMINI_API_KEY: Optional[str] = None
+    # Optional: support GOOGLE_API_KEY as an alternative env var name
+    GOOGLE_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-3-pro-preview"
+    GEMINI_TEMPERATURE: float = 0.4
     
     # Tavily API
     TAVILY_API_KEY: Optional[str] = None
@@ -45,6 +45,13 @@ class Settings(BaseSettings):
 
     # Backend JWT auth
     BACKEND_JWT_SECRET: str = "change-me"
+
+    @model_validator(mode="after")
+    def set_gemini_from_google(self):
+        """Allow using GOOGLE_API_KEY as fallback for GEMINI_API_KEY."""
+        if not self.GEMINI_API_KEY and self.GOOGLE_API_KEY:
+            object.__setattr__(self, "GEMINI_API_KEY", self.GOOGLE_API_KEY)
+        return self
     
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -66,6 +73,8 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        # Ignore any extra environment variables (e.g. legacy OLLAMA_* keys)
+        extra = "ignore"
 
 
 settings = Settings()
