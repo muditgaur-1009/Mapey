@@ -46,3 +46,5 @@ httpx==0.25.2
 # python-json-logger==2.0.7  # Optional: for advanced JSON logging
 PyJWT==2.8.0
 
+runtime.txt
+python-3.11.8
