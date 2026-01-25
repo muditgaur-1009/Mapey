@@ -6,8 +6,7 @@ from fastapi.responses import JSONResponse
 from typing import Optional
 from app.models.schemas import RoadmapRequest, RoadmapResponse, ErrorResponse
 from app.services.agents import roadmap_graph, MapeyState
-from app.services.file_processor import read_resume_file, chunk_text
-from app.services.vector_store import get_vector_store
+from app.services.file_processor import read_resume_file
 from app.core.config import settings
 from app.core.auth import get_current_user
 from app.core.logging import get_logger
@@ -79,12 +78,6 @@ async def generate_roadmap(
                 detail="Resume appears to be empty or unreadable. Please ensure the file contains text."
             )
         
-        # Add resume to vector store for RAG
-        chunks = chunk_text(resume_text)
-        vector_store = get_vector_store()
-        vector_store.add_texts(chunks)
-        logger.info(f"Added {len(chunks)} resume chunks to vector store")
-        
         # Prepare state for LangGraph
         initial_state: MapeyState = {
             "topic": topic.strip(),
@@ -93,7 +86,6 @@ async def generate_roadmap(
             "analysis": "",
             "skill_gaps": "",
             "curriculum": "",
-            "rag_context": "",
             "resources": "",
             "roadmap": ""
         }
@@ -119,7 +111,7 @@ async def generate_roadmap(
             curriculum=result.get("curriculum", ""),
             resources=result.get("resources", ""),
             analysis=result.get("analysis"),
-            rag_context=result.get("rag_context")
+            rag_context=None
         )
         
         return response
@@ -167,12 +159,6 @@ async def generate_roadmap_from_text(
     )
     
     try:
-        # Add resume to vector store for RAG
-        chunks = chunk_text(request.resume)
-        vector_store = get_vector_store()
-        vector_store.add_texts(chunks)
-        logger.info(f"Added {len(chunks)} resume chunks to vector store")
-        
         # Prepare state for LangGraph
         initial_state: MapeyState = {
             "topic": request.topic,
@@ -181,7 +167,6 @@ async def generate_roadmap_from_text(
             "analysis": "",
             "skill_gaps": "",
             "curriculum": "",
-            "rag_context": "",
             "resources": "",
             "roadmap": ""
         }
@@ -207,7 +192,7 @@ async def generate_roadmap_from_text(
             curriculum=result.get("curriculum", ""),
             resources=result.get("resources", ""),
             analysis=result.get("analysis"),
-            rag_context=result.get("rag_context")
+            rag_context=None
         )
         
         return response

@@ -9,7 +9,6 @@ from langgraph.graph import StateGraph, END
 from tavily import TavilyClient
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.services.vector_store import get_vector_store
 
 logger = get_logger(__name__)
 
@@ -37,7 +36,6 @@ class MapeyState(TypedDict):
     analysis: str
     skill_gaps: str
     curriculum: str
-    rag_context: str
     resources: str
     roadmap: str
 
@@ -196,22 +194,6 @@ Avoid generic statements.
         return {"skill_gaps": f"Error performing skill gap analysis: {str(e)}"}
 
 
-def rag_retriever(state: MapeyState) -> dict:
-    """Retrieve relevant context from vector store."""
-    logger.info("Running RAG retriever")
-    
-    try:
-        vector_store = get_vector_store()
-        query = f"Learning resources for {state['topic']} skills"
-        chunks = vector_store.search(query, k=5)
-        context = "\n".join(chunks) if chunks else "No relevant context found in knowledge base."
-        logger.info(f"RAG retriever found {len(chunks)} relevant chunks")
-        return {"rag_context": context}
-    except Exception as e:
-        logger.error(f"Error in RAG retriever: {str(e)}", exc_info=True)
-        return {"rag_context": "Error retrieving context from knowledge base."}
-
-
 def resource_curator(state: MapeyState) -> dict:
     """Curate web resources for learning."""
     logger.info("Running resource curator")
@@ -315,8 +297,8 @@ Inputs:
 Curriculum Plan:
 {curriculum}
 
-Resume & Knowledge Context (from RAG):
-{rag_context}
+Full Resume Text:
+{resume}
 
 Learning Resources:
 {resources}
@@ -369,7 +351,7 @@ Rules:
         chain = prompt | llm | parser
         roadmap = chain.invoke({
             "curriculum": state["curriculum"],
-            "rag_context": state.get("rag_context", "Not provided"),
+            "resume": state["resume"],
             "resources": state["resources"]
         })
         logger.info("Validator completed successfully, roadmap generated")
@@ -386,7 +368,6 @@ def create_roadmap_graph() -> StateGraph:
     graph.add_node("topic_analyzer", topic_analyzer)
     graph.add_node("skill_gap_agent", skill_gap_agent)
     graph.add_node("curriculum_planner", curriculum_planner)
-    graph.add_node("rag_retriever", rag_retriever)
     graph.add_node("resource_curator", resource_curator)
     graph.add_node("validator", validator)
     
@@ -394,8 +375,7 @@ def create_roadmap_graph() -> StateGraph:
     
     graph.add_edge("topic_analyzer", "skill_gap_agent")
     graph.add_edge("skill_gap_agent", "curriculum_planner")
-    graph.add_edge("curriculum_planner", "rag_retriever")
-    graph.add_edge("rag_retriever", "resource_curator")
+    graph.add_edge("curriculum_planner", "resource_curator")
     graph.add_edge("resource_curator", "validator")
     graph.add_edge("validator", END)
     
