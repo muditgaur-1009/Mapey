@@ -1,57 +1,67 @@
 """
-Vector store service using FAISS for RAG operations.
+Vector store service using FAISS for RAG operations with Ollama embeddings.
 """
 import faiss
 import numpy as np
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional
 from app.core.config import settings
 from app.core.logging import get_logger
 import pickle
 from pathlib import Path
-
-if TYPE_CHECKING:
-    from sentence_transformers import SentenceTransformer
+from ollama import Client
 
 logger = get_logger(__name__)
 
 
 class VectorStore:
-    """FAISS-based vector store for semantic search."""
+    """FAISS-based vector store for semantic search using Ollama embeddings."""
     
     def __init__(self):
         self.index: Optional[faiss.Index] = None
         self.texts: List[str] = []
-        self.embed_model: Optional["SentenceTransformer"] = None
+        self.ollama_client: Optional[Client] = None
         self._initialize_model()
         
         # Load persisted index if available
         if settings.VECTOR_STORE_INDEX_PATH:
             self._load_index()
     
-    def _initialize_model(self):
-        """Initialize the embedding model with error handling."""
+    def _initialize_model(self, retry_count: int = 0, max_retries: int = 3):
+        """Initialize the Ollama client for embeddings with retry logic."""
+        import time
+        
         try:
-            # Delay import to avoid startup errors if dependencies are missing
-            from sentence_transformers import SentenceTransformer
+            ollama_url = settings.OLLAMA_BASE_URL
+            logger.info(f"Connecting to Ollama at: {ollama_url} (attempt {retry_count + 1}/{max_retries + 1})")
+            self.ollama_client = Client(host=ollama_url)
             
-            logger.info(f"Loading embedding model: {settings.EMBED_MODEL_NAME}")
-            self.embed_model = SentenceTransformer(settings.EMBED_MODEL_NAME)
-            logger.info(f"Successfully initialized VectorStore with model: {settings.EMBED_MODEL_NAME}")
-        except ImportError as e:
-            error_msg = (
-                f"Failed to import required modules for SentenceTransformer.\n"
-                f"Error: {str(e)}\n\n"
-                f"Please install missing dependencies:\n"
-                f"  pip install transformers torch sentence-transformers\n"
-                f"Or run the fix script: fix_dependencies.bat (Windows) or fix_dependencies.sh (Linux/Mac)\n"
-                f"See backend/INSTALLATION_TROUBLESHOOTING.md for detailed instructions."
+            # Test connection by getting embeddings for a simple test
+            test_embedding = self.ollama_client.embeddings(
+                model=settings.EMBED_MODEL_NAME,
+                prompt="test"
             )
-            logger.error(error_msg, exc_info=True)
-            raise ImportError(error_msg) from e
+            logger.info(f"Successfully initialized VectorStore with Ollama embeddings model: {settings.EMBED_MODEL_NAME} (dim: {len(test_embedding['embedding'])})")
         except Exception as e:
-            logger.error(f"Failed to initialize embedding model: {str(e)}", exc_info=True)
-            raise
+            logger.warning(f"Failed to initialize Ollama client (attempt {retry_count + 1}/{max_retries + 1}): {str(e)}")
+            
+            if retry_count < max_retries:
+                # Wait before retrying (exponential backoff)
+                wait_time = 2 ** retry_count
+                logger.info(f"Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+                return self._initialize_model(retry_count + 1, max_retries)
+            else:
+                logger.error(f"Failed to initialize Ollama client after {max_retries + 1} attempts", exc_info=True)
+                logger.warning("Vector store will not be available. Make sure Ollama is running.")
+                # Don't raise - allow service to start without vector store
+                self.ollama_client = None
     
+    def _ensure_initialized(self):
+        """Retry initialization if client is missing."""
+        if self.ollama_client is None:
+            logger.info("Ollama client not initialized, attempting to reconnect...")
+            self._initialize_model()
+
     def add_texts(self, texts: List[str]) -> int:
         """
         Add texts to the vector store.
@@ -66,18 +76,28 @@ class VectorStore:
             logger.warning("Attempted to add empty text list to vector store")
             return 0
         
-        if self.embed_model is None:
-            raise RuntimeError("Embedding model not initialized. Cannot add texts.")
+        self._ensure_initialized()
+        if self.ollama_client is None:
+            raise RuntimeError("Ollama client not initialized. Cannot add texts.")
         
         try:
-            embeds = self.embed_model.encode(texts, show_progress_bar=False)
+            # Get embeddings from Ollama for each text
+            embeddings = []
+            for text in texts:
+                response = self.ollama_client.embeddings(
+                    model=settings.EMBED_MODEL_NAME,
+                    prompt=text
+                )
+                embeddings.append(response['embedding'])
+            
+            embeds = np.array(embeddings, dtype='float32')
             dim = embeds.shape[1]
             
             if self.index is None:
                 self.index = faiss.IndexFlatL2(dim)
                 logger.info(f"Created new FAISS index with dimension: {dim}")
             
-            self.index.add(embeds.astype('float32'))
+            self.index.add(embeds)
             self.texts.extend(texts)
             
             num_added = len(texts)
@@ -107,13 +127,18 @@ class VectorStore:
             logger.warning("Vector store is empty, returning empty results")
             return []
         
-        if self.embed_model is None:
-            logger.error("Embedding model not initialized. Cannot search.")
+        self._ensure_initialized()
+        if self.ollama_client is None:
+            logger.error("Ollama client not initialized. Cannot search.")
             return []
         
         try:
-            q_emb = self.embed_model.encode([query], show_progress_bar=False)
-            q_emb = q_emb.astype('float32')
+            # Get query embedding from Ollama
+            response = self.ollama_client.embeddings(
+                model=settings.EMBED_MODEL_NAME,
+                prompt=query
+            )
+            q_emb = np.array([response['embedding']], dtype='float32')
             
             # Ensure k doesn't exceed available texts
             k = min(k, len(self.texts))

@@ -8,8 +8,17 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy requirements files
+COPY requirements*.txt ./
+
+# Use clean requirements (no torch), then fallback options
+RUN if [ -f requirements-clean.txt ]; then \
+        pip install --no-cache-dir -r requirements-clean.txt; \
+    elif [ -f requirements-314.txt ]; then \
+        pip install --no-cache-dir -r requirements-314.txt; \
+    else \
+        pip install --no-cache-dir -r requirements.txt; \
+    fi
 
 COPY . .
 

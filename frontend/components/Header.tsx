@@ -6,8 +6,24 @@ import Link from 'next/link'
 import { useUser, useClerk, UserButton } from '@clerk/nextjs'
 
 export default function Header() {
-  const { isLoaded, isSignedIn, user } = useUser()
-  const { signOut } = useClerk()
+  // Fallback when Clerk not configured in local development (use a single publishable key)
+  const isClerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
+  const { isLoaded: clerkLoaded, isSignedIn: clerkSignedIn, user: clerkUser } = useUser() as any
+  const { signOut: clerkSignOut } = useClerk?.() as any || { signOut: () => {} }
+
+  const [authTimedOut, setAuthTimedOut] = useState(false)
+  useEffect(() => {
+    if (!isClerkEnabled) return
+    if (clerkLoaded) return
+    const t = setTimeout(() => setAuthTimedOut(true), 3000)
+    return () => clearTimeout(t)
+  }, [isClerkEnabled, clerkLoaded])
+
+  const isLoaded = isClerkEnabled ? (clerkLoaded || authTimedOut) : true
+  const devSignedIn = (typeof window !== 'undefined' && localStorage.getItem('MAPEY_DEV_SIGNED_IN') === 'true')
+  const isSignedIn = isClerkEnabled ? (clerkSignedIn || (authTimedOut && devSignedIn)) : (process.env.NEXT_PUBLIC_DEV_SIGNED_IN === 'true')
+  const user = isClerkEnabled ? clerkUser : { fullName: process.env.NEXT_PUBLIC_DEV_USER_NAME || process.env.DEMO_USER_EMAIL || 'Dev User', primaryEmailAddress: { emailAddress: process.env.DEMO_USER_EMAIL || 'dev@example.com' } }
+
   const [apiStatus, setApiStatus] = useState<'checking' | 'healthy' | 'unhealthy'>('checking')
 
   useEffect(() => {
@@ -36,6 +52,7 @@ export default function Header() {
               MAPEY
             </h1>
           </div>
+
           <div className="flex items-center space-x-4">
             {isLoaded && isSignedIn && user ? (
               <>
@@ -43,13 +60,20 @@ export default function Header() {
                   Signed in as <span className="font-semibold text-red-400">{user.fullName || user.primaryEmailAddress?.emailAddress}</span>
                 </span>
                 <button
-                  onClick={() => signOut()}
+                  onClick={() => {
+                    if (isClerkEnabled) {
+                      clerkSignOut()
+                    } else {
+                      // In dev fallback, just redirect to /login
+                      window.location.href = '/login'
+                    }
+                  }}
                   className="px-3 py-1.5 rounded-full text-[11px] font-semibold border border-red-700 text-red-200
                              hover:bg-red-900/40 transition-colors"
                 >
                   Log out
                 </button>
-                <UserButton afterSignOutUrl="/login" />
+                {isClerkEnabled ? <UserButton afterSignOutUrl="/login" /> : null}
               </>
             ) : (
               <Link
@@ -62,6 +86,7 @@ export default function Header() {
             )}
           </div>
         </div>
+
       </div>
     </header>
   )

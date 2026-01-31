@@ -62,7 +62,11 @@ Create a `.env.local` file:
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
+# Clerk client publishable key (required to use Clerk auth in the UI)
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_your_publishable_key_here
 ```
+
+Note: Only the public (publishable) key is needed on the client. The server-side secret (`CLERK_SECRET_KEY`) must be set in the backend `.env` (never commit secrets). We removed the in-UI debug display of Clerk environment values and standardized on a single client env var to avoid exposing unnecessary values.
 
 ## Styling
 

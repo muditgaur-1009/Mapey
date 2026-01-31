@@ -5,9 +5,10 @@ import ReactMarkdown from 'react-markdown'
 import { FileText, BookOpen, Target, ExternalLink, Copy, Check } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import toast from 'react-hot-toast'
+import ProgressBar from './ProgressBar'
 
 export default function RoadmapResults() {
-  const { data, error, isLoading } = useRoadmapStore()
+  const { data, error, isLoading, progress, currentStep } = useRoadmapStore()
   const [copiedSection, setCopiedSection] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -22,7 +23,6 @@ export default function RoadmapResults() {
     }
   }
 
-  // Auto-scroll to bottom when data loads
   // Scroll to top when new data loads
   useEffect(() => {
     if (data && scrollRef.current) {
@@ -30,95 +30,7 @@ export default function RoadmapResults() {
     }
   }, [data])
 
-
-  if (error) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-black p-6">
-        <div className="bg-black rounded-2xl shadow-2xl border border-red-800 p-12 max-w-lg w-full mx-4 text-center">
-          <div className="w-24 h-24 mx-auto mb-8 bg-red-900/40 rounded-2xl flex items-center justify-center">
-            <FileText className="w-12 h-12 text-red-500 dark:text-red-400" />
-          </div>
-          <h3 className="text-2xl font-bold text-white mb-4">
-            Something went wrong
-          </h3>
-          <p className="text-gray-300 text-lg mb-8 max-w-md mx-auto leading-relaxed">
-            {error}
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <button
-              onClick={() => window.location.reload()}
-              className="px-8 py-3 bg-gradient-to-r from-primary-600 to-primary-800 text-white font-semibold rounded-xl hover:shadow-lg transition-all duration-300"
-            >
-              Try Again
-            </button>
-            <button
-              className="px-8 py-3 bg-black border border-gray-700 text-gray-300 font-semibold rounded-xl hover:bg-red-950/40 transition-all duration-300"
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            >
-              Back to Form
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (isLoading || !data) {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-black p-8">
-      <div
-        className="bg-black/80 backdrop-blur-md rounded-3xl p-16 text-center max-w-2xl w-full mx-auto
-                   border border-red-600/40
-                   shadow-[0_0_30px_rgba(239,68,68,0.25)]"
-      >
-        <div className="flex flex-col items-center space-y-6 mb-8">
-          <div className="relative w-24 h-24 flex items-center justify-center">
-            {isLoading ? (
-              <div className="w-20 h-20 border-4 border-red-900 border-t-red-500 rounded-full animate-spin"></div>
-            ) : (
-              <Target className="w-24 h-24 text-red-500 drop-shadow-[0_0_12px_rgba(239,68,68,0.8)]" />
-            )}
-          </div>
-
-          <div>
-            <h3 className="text-3xl font-bold text-white mb-3 tracking-wide">
-              {isLoading ? 'Generating Your Roadmap' : 'Ready to Generate'}
-            </h3>
-
-            <p className="text-xl text-gray-300 mb-2 font-semibold">
-              {isLoading
-                ? 'AI agents analyzing your profile...'
-                : 'Fill in the form above and click "Generate Roadmap"'}
-            </p>
-
-            {isLoading && (
-              <div className="flex space-x-2 text-sm text-gray-400 mt-3 justify-center">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {!isLoading && (
-          <div className="text-gray-400 text-lg leading-relaxed max-w-lg mx-auto">
-            Our AI will create a personalized career roadmap based on:
-            <ul className="mt-4 space-y-2 text-left list-disc list-inside marker:text-red-500">
-              <li>Your target role and current skills</li>
-              <li>Skill gap analysis</li>
-              <li>Step-by-step learning curriculum</li>
-              <li>Curated learning resources</li>
-            </ul>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-
-  // Data exists and not loading - show results
+  // Section Card Component
   const SectionCard = ({ 
     title, 
     icon: Icon, 
@@ -160,6 +72,117 @@ export default function RoadmapResults() {
     </div>
   )
 
+  // Error State
+  if (error) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-black p-6">
+        <div className="bg-black rounded-2xl shadow-2xl border border-red-800 p-12 max-w-lg w-full mx-4 text-center">
+          <div className="w-24 h-24 mx-auto mb-8 bg-red-900/40 rounded-2xl flex items-center justify-center">
+            <FileText className="w-12 h-12 text-red-500 dark:text-red-400" />
+          </div>
+          <h3 className="text-2xl font-bold text-white mb-4">
+            Something went wrong
+          </h3>
+          <p className="text-gray-300 text-lg mb-8 max-w-md mx-auto leading-relaxed">
+            {error}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-8 py-3 bg-gradient-to-r from-primary-600 to-primary-800 text-white font-semibold rounded-xl hover:shadow-lg transition-all duration-300"
+            >
+              Try Again
+            </button>
+            <button
+              className="px-8 py-3 bg-black border border-gray-700 text-gray-300 font-semibold rounded-xl hover:bg-red-950/40 transition-all duration-300"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            >
+              Back to Form
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Loading or No Data State
+  if (isLoading || !data) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black p-8">
+        <div
+          className="bg-black/80 backdrop-blur-md rounded-3xl p-16 text-center max-w-3xl w-full mx-auto
+                     border border-red-600/40
+                     shadow-[0_0_30px_rgba(239,68,68,0.25)]"
+        >
+          {isLoading ? (
+            // Show progress bar when loading
+            <div className="space-y-8">
+              <div className="flex flex-col items-center space-y-6">
+                <div className="relative w-24 h-24 flex items-center justify-center">
+                  <div className="w-20 h-20 border-4 border-red-900 border-t-red-500 rounded-full animate-spin"></div>
+                </div>
+
+                <div>
+                  <h3 className="text-3xl font-bold text-white mb-3 tracking-wide">
+                    Generating Your Roadmap
+                  </h3>
+                  <p className="text-xl text-gray-300 mb-6 font-semibold">
+                    AI agents analyzing your profile...
+                  </p>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="mt-8">
+                <ProgressBar progress={progress} currentStep={currentStep} />
+              </div>
+
+              <div className="mt-8 text-sm text-gray-400 space-y-2">
+                <p>⚡ This typically takes 3-5 minutes</p>
+                <p>🔒 Your data is processed securely</p>
+              </div>
+            </div>
+          ) : (
+            // Show ready state when not loading
+            <div className="flex flex-col items-center space-y-6">
+              <Target className="w-24 h-24 text-red-500 drop-shadow-[0_0_12px_rgba(239,68,68,0.8)]" />
+
+              <div>
+                <h3 className="text-3xl font-bold text-white mb-3 tracking-wide">
+                  Ready to Generate
+                </h3>
+
+                <p className="text-xl text-gray-300 mb-6 font-semibold">
+                  Fill in the form above and click "Generate Roadmap"
+                </p>
+
+                <div className="mt-8 space-y-3 text-gray-400 text-left max-w-md mx-auto">
+                  <p className="flex items-start space-x-3">
+                    <span className="text-red-500 mt-1">•</span>
+                    <span>Your target role and current skills</span>
+                  </p>
+                  <p className="flex items-start space-x-3">
+                    <span className="text-red-500 mt-1">•</span>
+                    <span>Skill gap analysis</span>
+                  </p>
+                  <p className="flex items-start space-x-3">
+                    <span className="text-red-500 mt-1">•</span>
+                    <span>Step-by-step learning curriculum</span>
+                  </p>
+                  <p className="flex items-start space-x-3">
+                    <span className="text-red-500 mt-1">•</span>
+                    <span>Curated learning resources</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Data exists - show results
   return (
     <div className="h-screen overflow-hidden flex flex-col bg-black">
       {/* Fixed Header */}
@@ -212,7 +235,7 @@ export default function RoadmapResults() {
               </button>
             </div>
             <div className="grid md:grid-cols-2 gap-4">
-              {data.resources.split('\n').map((item, idx) => {
+              {data.resources.split('\n').map((item: string, idx: number) => {
                 if (!item.trim()) return null
                 const isUrl = item.startsWith('http://') || item.startsWith('https://')
                 return (

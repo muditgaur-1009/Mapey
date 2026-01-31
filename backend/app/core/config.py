@@ -24,13 +24,13 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "llama3.2:1b"
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_TEMPERATURE: float = 0.4
-    OLLAMA_NUM_CTX: int = 1048
+    OLLAMA_NUM_CTX: int = 4096
     
     # Tavily API
     TAVILY_API_KEY: Optional[str] = None
     
     # Embedding Model
-    EMBED_MODEL_NAME: str = "all-MiniLM-L6-v2"
+    EMBED_MODEL_NAME: str = "nomic-embed-text"  # Ollama's standard embedding model (274MB, high quality)
     
     # Logging
     LOG_LEVEL: str = "INFO"

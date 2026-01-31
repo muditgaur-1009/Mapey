@@ -16,7 +16,7 @@ export default function RoadmapForm() {
   const [useTextInput, setUseTextInput] = useState(false)
   const [localLoading, setLocalLoading] = useState(false)
 
-  const { isLoading, setLoading, setError, setData } = useRoadmapStore()
+  const { isLoading, setLoading, setError, setData, setProgress } = useRoadmapStore()
   const loading = isLoading || localLoading
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -56,15 +56,35 @@ export default function RoadmapForm() {
     setLocalLoading(true)
     setLoading(true)
     setError(null)
+    setProgress(0, 'Initializing...')
 
     try {
       let response
 
-      if (resumeFile && !useTextInput) {
-        response = await roadmapApi.generateFromFile(
-          topic.trim(),
-          resumeFile,
-          jd.trim() || undefined
+      // Use streaming for text input to show progress
+      if (useTextInput && resumeText.trim()) {
+        response = await roadmapApi.generateFromTextStream(
+          {
+            topic: topic.trim(),
+            resume: resumeText.trim(),
+            jd: jd.trim() || undefined,
+          },
+          (progressData) => {
+            setProgress(progressData.progress, progressData.step)
+          }
+        )
+      } else if (resumeFile && !useTextInput) {
+        // For file upload, use streaming too but read file first
+        const fileText = await resumeFile.text()
+        response = await roadmapApi.generateFromTextStream(
+          {
+            topic: topic.trim(),
+            resume: fileText,
+            jd: jd.trim() || undefined,
+          },
+          (progressData) => {
+            setProgress(progressData.progress, progressData.step)
+          }
         )
       } else {
         if (!resumeText.trim()) {
@@ -81,12 +101,14 @@ export default function RoadmapForm() {
       }
 
       setData(response)
+      setProgress(100, 'Complete!')
       toast.success('Roadmap generated successfully!')
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Failed to generate roadmap'
       setError(errorMessage)
       toast.error(errorMessage)
+      setProgress(0, '')
     } finally {
       // ensure both local and global loading flags are cleared
       setLocalLoading(false)

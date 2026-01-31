@@ -9,6 +9,8 @@ export default function LoginPage() {
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/'
 
+  const isClerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
+
   return (
     <main className="min-h-screen bg-black flex items-center justify-center px-4">
       <div className="max-w-4xl w-full grid md:grid-cols-2 gap-10 items-center">
@@ -29,15 +31,33 @@ export default function LoginPage() {
         <div className="bg-black/80 border border-red-900/60 rounded-2xl shadow-2xl p-8 space-y-6">
           <h2 className="text-2xl font-bold text-white mb-2">Welcome back</h2>
           <p className="text-sm text-gray-400 mb-4">
-            Sign in with Clerk to access the app.
+            {isClerkEnabled ? 'Sign in with Clerk to access the app.' : 'Clerk not configured for local development. Use demo credentials below or set up Clerk keys in .env.local.'}
           </p>
           <div className="space-y-6">
-            <SignIn
-              routing="path"
-              path="/login"
-              signUpUrl="/login"
-              fallbackRedirectUrl={callbackUrl}
-            />
+            {isClerkEnabled ? (
+              <SignIn
+                routing="path"
+                path="/login"
+                signUpUrl="/login"
+                fallbackRedirectUrl={callbackUrl}
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className="text-sm text-gray-300">
+                  Demo credentials:
+                  <div className="mt-2">
+                    <div>Email: <span className="font-mono">{process.env.DEMO_USER_EMAIL || 'demo@example.com'}</span></div>
+                    <div>Password: <span className="font-mono">{process.env.DEMO_USER_PASSWORD || 'changeme'}</span></div>
+                  </div>
+                </div>
+                <a
+                  href="/"
+                  className="inline-block px-4 py-2 rounded-md bg-red-600 text-white font-semibold"
+                >
+                  Continue as demo user
+                </a>
+              </div>
+            )}
           </div>
         </div>
       </div>

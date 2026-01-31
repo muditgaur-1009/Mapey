@@ -43,6 +43,8 @@ class MapeyState(TypedDict):
     rag_context: str
     resources: str
     roadmap: str
+    progress: int  # Progress percentage (0-100)
+    current_step: str  # Current step description
 
 
 @tool
@@ -65,6 +67,8 @@ def web_search(query: str) -> str:
 def topic_analyzer(state: MapeyState) -> dict:
     """Analyze the target role and provide expert insights."""
     logger.info(f"Running topic analyzer for: {state['topic']}")
+    state["progress"] = 10
+    state["current_step"] = "Analyzing target role and industry expectations"
     
     prompt = PromptTemplate.from_template("""
 You are a senior industry expert, hiring manager, and career mentor.
@@ -117,7 +121,7 @@ Avoid generic advice. Be specific and practical.
         chain = prompt | llm | parser
         result = chain.invoke({"topic": state["topic"]})
         logger.info("Topic analyzer completed successfully")
-        return {"analysis": result}
+        return {"analysis": result, "progress": 25, "current_step": "Topic analysis complete"}
     except Exception as e:
         logger.error(f"Error in topic analyzer: {str(e)}", exc_info=True)
         return {"analysis": f"Error analyzing topic: {str(e)}"}
@@ -126,6 +130,8 @@ Avoid generic advice. Be specific and practical.
 def skill_gap_agent(state: MapeyState) -> dict:
     """Perform skill gap analysis between resume and job requirements."""
     logger.info("Running skill gap agent")
+    state["progress"] = 30
+    state["current_step"] = "Analyzing skill gaps and comparing with job requirements"
     
     prompt = PromptTemplate.from_template("""
 You are an expert technical recruiter and career coach.
@@ -193,7 +199,7 @@ Avoid generic statements.
             "jd": state.get("jd", "Not provided")
         })
         logger.info("Skill gap agent completed successfully")
-        return {"skill_gaps": result}
+        return {"skill_gaps": result, "progress": 45, "current_step": "Skill gap analysis complete"}
     except Exception as e:
         logger.error(f"Error in skill gap agent: {str(e)}", exc_info=True)
         return {"skill_gaps": f"Error performing skill gap analysis: {str(e)}"}
@@ -202,6 +208,8 @@ Avoid generic statements.
 def rag_retriever(state: MapeyState) -> dict:
     """Retrieve relevant context from vector store."""
     logger.info("Running RAG retriever")
+    state["progress"] = 60
+    state["current_step"] = "Retrieving relevant context from your experience"
     
     try:
         vector_store = get_vector_store()
@@ -209,7 +217,7 @@ def rag_retriever(state: MapeyState) -> dict:
         chunks = vector_store.search(query, k=5)
         context = "\n".join(chunks) if chunks else "No relevant context found in knowledge base."
         logger.info(f"RAG retriever found {len(chunks)} relevant chunks")
-        return {"rag_context": context}
+        return {"rag_context": context, "progress": 65, "current_step": "Context retrieval complete"}
     except Exception as e:
         logger.error(f"Error in RAG retriever: {str(e)}", exc_info=True)
         return {"rag_context": "Error retrieving context from knowledge base."}
@@ -218,6 +226,8 @@ def rag_retriever(state: MapeyState) -> dict:
 def resource_curator(state: MapeyState) -> dict:
     """Curate web resources for learning."""
     logger.info("Running resource curator")
+    state["progress"] = 70
+    state["current_step"] = "Finding best learning resources and courses"
     
     queries = [
         f"Best courses for {state['topic']}",
@@ -236,12 +246,14 @@ def resource_curator(state: MapeyState) -> dict:
 
     resources = "\n".join(links)
     logger.info("Resource curator completed")
-    return {"resources": resources}
+    return {"resources": resources, "progress": 80, "current_step": "Resource curation complete"}
 
 
 def curriculum_planner(state: MapeyState) -> dict:
     """Create a structured learning curriculum."""
     logger.info("Running curriculum planner")
+    state["progress"] = 50
+    state["current_step"] = "Designing personalized learning curriculum"
     
     prompt = PromptTemplate.from_template("""
 You are a senior learning designer and technical mentor.
@@ -297,7 +309,7 @@ Rules:
             "analysis": state["analysis"]
         })
         logger.info("Curriculum planner completed successfully")
-        return {"curriculum": result}
+        return {"curriculum": result, "progress": 60, "current_step": "Curriculum planning complete"}
     except Exception as e:
         logger.error(f"Error in curriculum planner: {str(e)}", exc_info=True)
         return {"curriculum": f"Error creating curriculum: {str(e)}"}
@@ -306,6 +318,8 @@ Rules:
 def validator(state: MapeyState) -> dict:
     """Validate and synthesize final roadmap."""
     logger.info("Running validator to generate final roadmap")
+    state["progress"] = 85
+    state["current_step"] = "Generating final comprehensive roadmap"
     
     prompt = PromptTemplate.from_template("""
 You are a senior career architect and learning program designer.
@@ -376,7 +390,7 @@ Rules:
             "resources": state["resources"]
         })
         logger.info("Validator completed successfully, roadmap generated")
-        return {"roadmap": roadmap}
+        return {"roadmap": roadmap, "progress": 100, "current_step": "Roadmap generation complete!"}
     except Exception as e:
         logger.error(f"Error in validator: {str(e)}", exc_info=True)
         return {"roadmap": f"Error generating roadmap: {str(e)}"}

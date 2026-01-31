@@ -163,6 +163,19 @@ async def startup_event():
             "log_level": settings.LOG_LEVEL
         }
     )
+    
+    # Initialize vector store to ensure Ollama connection is ready
+    logger.info("Initializing vector store and Ollama connection...")
+    try:
+        from app.services.vector_store import get_vector_store
+        vector_store = get_vector_store()
+        if vector_store.ollama_client:
+            logger.info("Vector store initialized successfully")
+        else:
+            logger.warning("Vector store initialized but Ollama connection failed. Will retry on first use.")
+    except Exception as e:
+        logger.error(f"Error initializing vector store: {str(e)}", exc_info=True)
+        logger.warning("Service will start but vector operations may fail until Ollama is available")
 
 
 @app.on_event("shutdown")

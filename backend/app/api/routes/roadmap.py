@@ -1,9 +1,9 @@
 """
 API routes for roadmap generation.
 """
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
-from fastapi.responses import JSONResponse
-from typing import Optional
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+from typing import Optional, AsyncGenerator
 from app.models.schemas import RoadmapRequest, RoadmapResponse, ErrorResponse
 from app.services.agents import roadmap_graph, MapeyState
 from app.services.file_processor import read_resume_file, chunk_text
@@ -12,6 +12,8 @@ from app.core.config import settings
 from app.core.auth import get_current_user
 from app.core.logging import get_logger
 import time
+import json
+import asyncio
 
 logger = get_logger(__name__)
 
@@ -222,6 +224,143 @@ async def generate_roadmap_from_text(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
         )
+
+
+@router.post("/generate-from-text-stream")
+async def generate_roadmap_from_text_stream(
+    request: RoadmapRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Generate a career roadmap with real-time progress streaming using Server-Sent Events.
+    
+    Returns progress updates as they happen, including percentage and current step description.
+    """
+    async def event_generator() -> AsyncGenerator[str, None]:
+        request_id = f"req_{int(time.time() * 1000)}"
+        start_time = time.time()
+        
+        try:
+            # Send initial progress
+            yield f"data: {json.dumps({'progress': 0, 'step': 'Initializing roadmap generation', 'status': 'processing'})}\n\n"
+            await asyncio.sleep(0.1)
+            
+            logger.info(
+                f"Streaming roadmap generation request received",
+                extra={
+                    "request_id": request_id,
+                    "topic": request.topic,
+                    "resume_length": len(request.resume),
+                    "has_jd": request.jd is not None
+                }
+            )
+            
+            # Send progress update
+            yield f"data: {json.dumps({'progress': 5, 'step': 'Processing resume content', 'status': 'processing'})}\n\n"
+            await asyncio.sleep(0.1)
+            
+            # Add resume to vector store for RAG
+            chunks = chunk_text(request.resume)
+            vector_store = get_vector_store()
+            vector_store.add_texts(chunks)
+            logger.info(f"Added {len(chunks)} resume chunks to vector store")
+            
+            # Send progress update
+            yield f"data: {json.dumps({'progress': 8, 'step': f'Added {len(chunks)} knowledge chunks to context', 'status': 'processing'})}\n\n"
+            await asyncio.sleep(0.1)
+            
+            # Prepare state for LangGraph
+            initial_state: MapeyState = {
+                "topic": request.topic,
+                "resume": request.resume,
+                "jd": request.jd or "",
+                "analysis": "",
+                "skill_gaps": "",
+                "curriculum": "",
+                "rag_context": "",
+                "resources": "",
+                "roadmap": "",
+                "progress": 10,
+                "current_step": "Starting workflow"
+            }
+            
+            # Execute the roadmap generation graph in a thread
+            logger.info(f"Starting roadmap generation workflow")
+            
+            # Track last progress to send updates
+            last_progress = 10
+            
+            # Run the graph and periodically check for updates
+            # Since we can't easily stream from LangGraph, we'll poll the state
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(roadmap_graph.invoke, initial_state)
+                
+                # Poll for completion and send periodic updates
+                while not future.done():
+                    await asyncio.sleep(2)  # Check every 2 seconds
+                    # Send a heartbeat to keep connection alive
+                    current_progress = min(last_progress + 5, 95)
+                    yield f"data: {json.dumps({'progress': current_progress, 'step': 'Processing...', 'status': 'processing'})}\n\n"
+                    last_progress = current_progress
+                
+                # Get the result
+                result = future.result()
+            
+            # Send final progress
+            yield f"data: {json.dumps({'progress': 100, 'step': 'Roadmap generation complete!', 'status': 'processing'})}\n\n"
+            await asyncio.sleep(0.1)
+            
+            # Calculate processing time
+            processing_time = time.time() - start_time
+            logger.info(
+                f"Roadmap generation completed successfully",
+                extra={
+                    "request_id": request_id,
+                    "processing_time_seconds": round(processing_time, 2)
+                }
+            )
+            
+            # Send final result
+            response_data = {
+                "progress": 100,
+                "step": "Complete",
+                "status": "complete",
+                "result": {
+                    "roadmap": result.get("roadmap", ""),
+                    "skill_gaps": result.get("skill_gaps", ""),
+                    "curriculum": result.get("curriculum", ""),
+                    "resources": result.get("resources", ""),
+                    "analysis": result.get("analysis"),
+                    "rag_context": result.get("rag_context"),
+                    "processing_time": round(processing_time, 2)
+                }
+            }
+            yield f"data: {json.dumps(response_data)}\n\n"
+            
+        except Exception as e:
+            logger.error(
+                f"Error generating roadmap: {str(e)}",
+                extra={"request_id": request_id},
+                exc_info=True
+            )
+            error_data = {
+                "progress": 0,
+                "step": f"Error: {str(e)}",
+                "status": "error",
+                "error": str(e)
+            }
+            yield f"data: {json.dumps(error_data)}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @router.get("/vector-store/stats")

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { RoadmapRequest, RoadmapResponse, ErrorResponse } from '@/types/api'
+import { RoadmapRequest, RoadmapResponse, ErrorResponse } from '../types/api'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -18,6 +18,9 @@ async function ensureBackendToken(): Promise<string> {
   }
   const data = await res.json()
   backendToken = data.token
+  if (!backendToken) {
+    throw new Error('Failed to obtain backend token')
+  }
   return backendToken
 }
 
@@ -109,6 +112,80 @@ export const roadmapApi = {
     )
 
     return response.data
+  },
+
+  /**
+   * Generate roadmap with streaming progress updates
+   */
+  async generateFromTextStream(
+    request: RoadmapRequest,
+    onProgress: (data: { progress: number; step: string; status: string }) => void
+  ): Promise<RoadmapResponse> {
+    const token = await ensureBackendToken()
+    
+    const response = await fetch(`${API_URL}/api/v1/roadmap/generate-from-text-stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(request),
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error('No response body')
+    }
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let finalResult: RoadmapResponse | null = null
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.trim() === '' || !line.startsWith('data:')) continue
+          
+          const data = line.replace(/^data:\s*/, '')
+          try {
+            const parsed = JSON.parse(data)
+            
+            if (parsed.status === 'complete' && parsed.result) {
+              finalResult = parsed.result
+            } else if (parsed.status === 'error') {
+              throw new Error(parsed.error || 'Unknown error occurred')
+            } else {
+              onProgress({
+                progress: parsed.progress || 0,
+                step: parsed.step || 'Processing...',
+                status: parsed.status || 'processing'
+              })
+            }
+          } catch (e) {
+            console.warn('Failed to parse SSE data:', data)
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
+
+    if (!finalResult) {
+      throw new Error('No result received from server')
+    }
+
+    return finalResult
   },
 
   /**
